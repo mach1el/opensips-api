@@ -1,0 +1,230 @@
+# -----------------------------
+# Python bytecode / cache
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# -----------------------------
+# Distribution / packaging
+# -----------------------------
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PEP 582 (e.g. pdm)
+__pypackages__/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+.pip-selfcheck.json
+
+# -----------------------------
+# Unit test / coverage
+# -----------------------------
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+pytestdebug.log
+
+# -----------------------------
+# Type checkers
+# -----------------------------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.pyright/
+
+# -----------------------------
+# Linters / formatters
+# (keep tool config files committed)
+# -----------------------------
+.ruff_cache/
+
+# -----------------------------
+# Environments & secrets
+# -----------------------------
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+.python-version
+
+# -----------------------------
+# Jupyter / IPython
+# -----------------------------
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# -----------------------------
+# Task queues
+# -----------------------------
+celerybeat-schedule
+celerybeat.pid
+
+# -----------------------------
+# Logs & temp files
+# -----------------------------
+*.log
+logs/
+log/
+tmp/
+temp/
+*.pid
+*.tmp
+*.swp
+*.swo
+*~
+.cache/
+coverage_html/
+site/
+
+# -----------------------------
+# Databases (local/dev)
+# -----------------------------
+*.sqlite3
+*.sqlite
+*.db
+
+# -----------------------------
+# Framework specifics (optional)
+# -----------------------------
+# Django
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static/
+
+# Flask
+instance/
+.webassets-cache
+
+# FastAPI / Uvicorn
+uvicorn.log
+
+# Scrapy
+.scrapy
+
+# Sphinx docs
+docs/_build/
+doc/_build/
+builddocs/
+
+# PyBuilder
+target/
+
+# Cython debug symbols
+cython_debug/
+
+# -----------------------------
+# IDE / Editor junk
+# -----------------------------
+# VS Code
+.vscode/
+.vscode-remote/
+*.code-workspace
+
+# JetBrains / PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio
+.vs/
+
+# Eclipse / PyDev
+.project
+.pydevproject
+.settings/
+
+# Spyder / Rope
+.spyproject/
+.ropeproject
+
+# General editor history
+.history
+
+# -----------------------------
+# OS files
+# -----------------------------
+# macOS
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+
+# -----------------------------
+# Containers / DevOps (optional)
+# -----------------------------
+docker-compose.override.yml
+.docker/
+docker/volumes/
+
+# Ansible
+*.retry
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# -----------------------------
+# Mixed stack (optional)
+# -----------------------------
+# Node (if repo includes frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
