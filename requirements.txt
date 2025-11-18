@@ -1,0 +1,8 @@
+asyncpg
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-multipart
+httpx
+pytest
+psycopg2
