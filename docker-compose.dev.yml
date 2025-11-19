@@ -1,3 +1,24 @@
+x-defaults: &defaults
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  # read_only: true
+  # tmpfs:
+  #   - /tmp
+  #   - /run
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  networks:
+    - myapi
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 networks:
   myapi:
     driver: bridge
@@ -7,17 +28,18 @@ volumes:
 
 services:
   postgres:
-    image: mich43l/postgresql:opensips-3.4
+    <<: *defaults
+    image: mich43l/postgresql:opensips-cdr-callee
     container_name: pg-opensips
     restart: unless-stopped
     environment:
       POSTGRES_DB: opensips
       POSTGRES_USER: opensips
-      POSTGRES_PASSWORD: opensips
+      POSTGRES_PASSWORD: opensipsrw
       POSTGRES_ALLOW_EXTERNAL: 1
-      PG_ALLOWED_CIDRS: "127.0.0.1/32,::1/128,172.20.0.0/16,192.168.0.0/16"
+      PG_ALLOWED_CIDRS: "127.0.0.1/32,::1/128,172.23.0.0/16,192.168.0.0/16"
     ports:
-      - "2345:5432"
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U opensips -d opensips"]
       interval: 5s
@@ -25,25 +47,24 @@ services:
       retries: 30
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks:
-      - myapi
 
   api:
-    image: mich43l/opensips-api:dialplan-0.3
-    container_name: opensips-api-dialplan
-    restart: unless-stopped
+    <<: *defaults
+    build:
+      context: .
+    container_name: opensips-api
     ports:
-      - "3000:3000"
+      - "3030:3030"
     environment:
+      API_KEY: CnvdPpEawY3Wec2J
+      API_KEY_HEADER_NAME: X-API-Key
       POSTGRES_HOST: pg-opensips
       POSTGRES_USER: opensips
-      POSTGRES_PASSWORD: opensips
+      POSTGRES_PASSWORD: opensipsrw
       POSTGRES_DB: opensips
       POSTGRES_PORT: 5432
       DB_POOL_SIZE: 5
       DB_MAX_OVERFLOW: 10
-    # volumes:
-    #   - ./app:/app/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
-    networks:
-      - myapi
+      OPENSIPS_MI_HOST: localhost
+      OPENSIPS_MI_PORT: 8989
+    command: uvicorn app.main:app --host 0.0.0.0 --port 3030 --reload

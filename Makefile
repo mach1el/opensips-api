@@ -12,7 +12,7 @@
 	pytest -q
 
   build:
-	docker buildx build --platform linux/amd64 -t mich43l/opensips-api:0.3 .
+	docker buildx build --platform linux/amd64 -t mich43l/opensips-api:0.4 .
 
   run:
 	docker compose -f docker-compose.dev.yml up --build

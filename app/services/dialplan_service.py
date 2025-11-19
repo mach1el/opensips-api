@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Sequence
+from typing import Sequence, Any, Dict, List, Tuple
 from app.services.db import get_db_pool
 from app.services.opensips_mi import mi_execute
 from app.schemas import (
@@ -27,15 +27,50 @@ async def is_special_did(did: str) -> bool:
 
   return bool(row)
 
-async def insert_dialplan_entries(entries: Sequence[DialplanEntry]) -> int:
+async def insert_dialplan_entries(entries: Sequence[DialplanEntry]) -> Dict[str, Any]:
   """
   Insert multiple dialplan rows into the database.
   Returns number of inserted rows.
   """
   if not entries:
-    return 0
+     return {"inserted": 0, "skipped": 0, "mi_response": None}
+
+  unique_map: Dict[Tuple[int, str], DialplanEntry] = {}
+  for e in entries:
+    key = (e.dpid, e.match_exp)
+    if key not in unique_map:
+      unique_map[key] = e
+
+  unique_entries: List[DialplanEntry] = list(unique_map.values())
+  dpids = sorted({e.dpid for e in unique_entries})
 
   pool = await get_db_pool()
+
+  sql_existing = """
+    SELECT dpid, match_exp
+    FROM dialplan
+    WHERE dpid = ANY($1::int[])
+  """
+
+  async with pool.acquire() as conn:
+    rows = await conn.fetch(sql_existing, dpids)
+
+  existing_pairs = {(r["dpid"], r["match_exp"]) for r in rows}
+
+  new_entries: List[DialplanEntry] = [
+    e for e in unique_entries
+    if (e.dpid, e.match_exp) not in existing_pairs
+  ]
+
+  skipped_count = len(entries) - len(new_entries)
+
+  if not new_entries:
+    # Nothing new to insert → no MI reload
+    return {
+      "inserted": 0,
+      "skipped": skipped_count,
+      "mi_response": None,
+    }
 
   sql = """
     INSERT INTO dialplan (
@@ -78,7 +113,8 @@ async def insert_dialplan_entries(entries: Sequence[DialplanEntry]) -> int:
   mi_response = await mi_execute(MI_COMMAND)
 
   return {
-    "inserted": len(values),
+    "inserted": len(new_entries),
+    "skipped": skipped_count,
     "mi_response": mi_response,
   }
 
