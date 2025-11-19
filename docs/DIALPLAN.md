@@ -18,6 +18,7 @@ The service is designed to:
   - List all existing rules
   - Delete rules by ID
 - Automatically call OpenSIPS MI (`dp_reload`) after insert/delete operations
+- Protect all APIs with a simple **header-based API key**
 ---
 
 ## Architecture Overview
@@ -25,7 +26,7 @@ The service is designed to:
 ```text
 +-------------+        HTTP/JSON        +------------------+       MI JSON-RPC       +-------------+
 |   Client    |  <--------------------> |  Dialplan API    |  <------------------->  |  OpenSIPS   |
-|  (Portal)   |   /api/v1/dialplan/*    |  (FastAPI)       |   POST /mi dp_reload   |  Proxy       |
+|  (Portal)   |   /api/v1/dialplan/*    |  (FastAPI)       |   POST /mi dp_reload    |  Proxy      |
 +-------------+                         +------------------+                         +-------------+
                                                |
                                                | asyncpg
@@ -36,6 +37,11 @@ The service is designed to:
                                          +-----------+
 ```
 
+- **FastAPI** handles HTTP endpoints.
+- **asyncpg** talks to PostgreSQL (`dialplan` table).
+- **httpx** sends JSON-RPC requests to OpenSIPS MI (`dp_reload`) after changes.
+- All `/api/v1/*` endpoints are protected with a **static API key** in the HTTP headers.
+
 ---
 
 ## Quick Start
@@ -44,6 +50,13 @@ The service is designed to:
 
 All configuration uses environment variables (e.g. injected via Docker or
 Kubernetes).
+
+### API Key
+
+```env
+API_KEY=super-secret-key-here
+API_KEY_HEADER_NAME=X-API-Key
+```
 
 ### PostgreSQL
 
@@ -75,24 +88,22 @@ PORT=3000        # uvicorn port
 
 ### Run with Docker
 
-```dockerfile
-FROM python:3.12-slim
+```bash
+docker build -t opensips-api .
 
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
-WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends   build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app ./app
-
-ARG PORT=3000
-ENV PORT=${PORT}
-EXPOSE ${PORT}
-
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+docker run --rm \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_USER=opensips \
+  -e POSTGRES_PASSWORD=secret \
+  -e POSTGRES_DB=opensips \
+  -e OPENSIPS_MI_HOST=opensips \
+  -e OPENSIPS_MI_PORT=8787 \
+  -e API_KEY=super-secret-key-here \
+  -e API_KEY_HEADER_NAME=X-API-Key \
+  -e PORT=3000 \
+  -p 3000:3000 \
+  opensips-api
 ```
 
 `requirements.txt` (example):
@@ -116,6 +127,8 @@ services:
       args:
         PORT: 3000
     environment:
+      API_KEY: CnvdPpEawY3Wec2J
+      API_KEY_HEADER_NAME: X-API-Key
       POSTGRES_HOST: pg-opensips
       POSTGRES_USER: test
       POSTGRES_PASSWORD: test
@@ -144,6 +157,14 @@ services:
       retries: 10
 ```
 
+### Run with Make
+
+`Run the stack`:
+
+```bash
+make run
+```
+
 ---
 
 ## Dialplan Model
@@ -160,7 +181,6 @@ Internally, each dialplan rule is represented as:
   "match_flags": "0",
   "subst_exp": "^.*$",
   "repl_exp": "sip.example.org:5060",
-  "timerec": null,
   "disabled": false,
   "attrs": null
 }
@@ -183,6 +203,31 @@ Fields:
 | `attrs`       | `string(255)`   | `TEXT` or `JSONB`                         | **Attributes** – free-form string returned when the rule matches. Commonly used to store metadata (tags, routing hints). In this API, we expose it as a JSON object and serialize it into this column. ([openSIPS][1]) |
 
 [1]: https://www.opensips.org/Documentation/Install-DBSchema-3-6 "openSIPS | Documentation / DB schema - 3.6 "
+
+---
+
+## Authentication (API key)
+
+All `/api/v1/*` endpoints are protected by a **static API key**.
+
+- The key is passed via a configurable HTTP header (default: `X-API-Key`)
+- The value must match the `API_KEY` configured in the environment
+
+### Example
+
+```bash
+curl -X GET "http://localhost:3000/api/v1/dialplan/fetchall"   -H "X-API-Key: super-secret-key-here"
+```
+
+If the header is missing or invalid, the API returns:
+
+```json
+{ "detail": "Missing API key" }
+
+or
+
+{ "detail": "Invalid API key" }
+```
 
 ---
 
@@ -223,7 +268,15 @@ Checks if the given DID **exactly matches** any `match_exp` in the `dialplan` ta
 **POST** `/api/v1/dialplan/add`
 
 Inserts multiple dialplan entries into the `dialplan` table and then calls
-OpenSIPS MI `dp_reload` via JSON-RPC.
+OpenSIPS MI `dp_reload` via JSON-RPC **only if at least one new row was inserted**.
+
+The service:
+
+- De-duplicates entries **inside the request body**.
+- Checks existing rows in the database by `(dpid, match_exp)`.
+- Skips insertion for any rule where `(dpid, match_exp)` is already present.
+- Only inserts **new** rules.
+- Returns how many were **inserted** and how many were **skipped**.
 
 **Request body**
 
@@ -262,17 +315,29 @@ OpenSIPS MI `dp_reload` via JSON-RPC.
 }
 ```
 
-**Response example**
+**Response example (some new, some existing)**
 
 ```json
 {
   "status": "ok",
-  "inserted": 2,
+  "inserted": 1,
+  "skipped": 1,
   "mi": {
     "jsonrpc": "2.0",
     "result": "OK",
     "id": "1"
   }
+}
+```
+
+**Response example (all already exist in DB)**
+
+```json
+{
+  "status": "ok",
+  "inserted": 0,
+  "skipped": 2,
+  "mi": null
 }
 ```
 
@@ -293,7 +358,9 @@ If MI returns an error, it is passed through:
 }
 ```
 
-> Note: data is written to DB regardless of MI result; MI response is only for visibility.
+> Note:
+> - `skipped` includes entries that already exist in DB and duplicates inside the same request.
+> - `mi` contains the raw JSON-RPC response from OpenSIPS or `null` when no reload was triggered.
 
 ---
 
@@ -350,7 +417,7 @@ If a row was deleted, OpenSIPS MI `dp_reload` is called.
 **Example**
 
 ```bash
-curl -X DELETE http://localhost:3000/api/v1/dialplan/delete/3
+curl -X DELETE "http://localhost:3000/api/v1/dialplan/delete/3" -H "X-API-Key: super-secret-key-here"
 ```
 
 **Response (deleted)**

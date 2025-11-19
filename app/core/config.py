@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from typing import List
 import os
 
@@ -7,12 +7,21 @@ class Settings(BaseSettings):
   model_config = SettingsConfigDict(extra="ignore")
 
   APP_NAME: str = "custom-dialplan"
-  APP_VERSION: str = "0.1.0"
+  APP_VERSION: str = "0.4.0"
   ENV: str = os.getenv("ENV", "prod")
   API_PREFIX: str = "/api/v1"
   LOG_LEVEL: str = "INFO"
 
   CORS_ORIGINS: List[str] = ["*"]
+
+  API_KEY: str = Field(
+    ...,
+    description="Global API key required to access the API"
+  )
+  API_KEY_HEADER_NAME: str = Field(
+    "X-API-Key",
+    description="HTTP header name that carries the API key"
+  )
 
   DATABASE_URL: str | None = None
   POSTGRES_USER: str = "postgres"
@@ -32,6 +41,12 @@ class Settings(BaseSettings):
   def split_cors(cls, v):
     if isinstance(v, str):
       return [s.strip() for s in v.split(",") if s.strip()]
+    return v
+
+  @field_validator("API_KEY")
+  def validate_api_key(cls, v: str) -> str:
+    if not v or not v.strip():
+      raise ValueError("API_KEY cannot be empty")
     return v
   
   @field_validator("DATABASE_URL", mode="before")
